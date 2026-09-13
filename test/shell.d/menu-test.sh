@@ -136,7 +136,9 @@ const rankBase = menu.mergeMenuSources(defaultItems, [])
 const ranked = menu.mergeAppRows(rankBase.items, rankBase.itemOrder, [
   { id: 'apps.brave', parent: 'apps', kind: 'app', label: 'Brave', description: '', aliases: [] },
   { id: 'apps.fontforge', parent: 'apps', kind: 'app', label: 'FontForge', description: '', aliases: [] },
-  { id: 'apps.zen', parent: 'apps', kind: 'app', label: 'Zen Browser', description: '', aliases: [] }
+  { id: 'apps.zen', parent: 'apps', kind: 'app', label: 'Zen Browser', description: '', aliases: [] },
+  { id: 'apps.chrome', parent: 'apps', kind: 'app', label: 'Google Chrome', description: '', aliases: [] },
+  { id: 'apps.vscode', parent: 'apps', kind: 'app', label: 'Visual Studio Code', description: '', aliases: [] }
 ])
 const rankScore = (id, query) => menu.searchScore(ranked.items, ranked.items[id], query)
 assert(
@@ -150,6 +152,48 @@ assert(
     id => rankScore('apps.zen', 'zen') < rankScore(id, 'zen')
   ),
   'menu ranks an app matching the query as a whole word above exact-labeled menu entries'
+)
+// "Google Chrome" carries the name people type second, so a prefix of it only
+// ever lands mid-label while the same prefix hits position 0 on menu entries
+// labelled with the bare name. "chrome" takes the whole-word tier; "chr" and
+// "chro" are the ones that exercise the word-prefix tier.
+const chromeMenuIds = ['install.browser.chrome', 'remove.browser.chrome', 'setup.default.browser.chrome']
+assert(
+  ['chr', 'chro', 'chrome'].every(query =>
+    chromeMenuIds.every(id => rankScore('apps.chrome', query) < rankScore(id, query))
+  ),
+  'menu ranks an installed app above exact-labeled menu entries for a prefix of a later word in its label'
+)
+assert(
+  rankScore('apps.chrome', 'chrome') < rankScore('apps.chrome', 'chr'),
+  'menu scores an app matched as a whole word above the same app matched by a prefix of it'
+)
+// The word-prefix tier stays below a label that starts at the query: Config
+// keeps "co" against an app whose third word happens to start there too.
+assert(
+  rankScore('setup.config', 'co') < rankScore('apps.vscode', 'co'),
+  'menu keeps a menu entry whose whole label starts at the query above an app matching a later word'
+)
+// An empty query must leave every row on the label-anchored tiers rather than
+// collecting app words, since every word starts with an empty needle.
+assertEqual(
+  Math.floor(rankScore('apps.chrome', '') / 1000),
+  5,
+  'menu leaves an empty query on the label tiers instead of promoting every app through a word tier'
+)
+// An exact label outranks the word-prefix tier for every kind, including a root
+// action, which takes no kind discount at all.
+const exactBase = menu.mergeMenuSources([
+  menu.normalizeItem('root', { label: 'Go' }),
+  menu.normalizeItem('vision', { label: 'Vision', action: 'run-vision' })
+], [])
+const exactRanked = menu.mergeAppRows(exactBase.items, exactBase.itemOrder, [
+  { id: 'apps.visionary', parent: 'apps', kind: 'app', label: 'Studio Visionary', description: '', aliases: [] }
+])
+assert(
+  menu.searchScore(exactRanked.items, exactRanked.items['vision'], 'vision') <
+    menu.searchScore(exactRanked.items, exactRanked.items['apps.visionary'], 'vision'),
+  'menu keeps an exact-labeled root action above an app matching the query as a word prefix'
 )
 assert(
   rankScore('style.font', 'font') < rankScore('apps.fontforge', 'font'),

@@ -343,13 +343,25 @@ function searchScore(items, entry, query) {
   var label = entry.label.toLowerCase()
   var nameText = nameSearchText(entry)
   var descriptionText = String(entry.description || "").toLowerCase()
+  // An app label carries a vendor word ahead of the name people actually type
+  // ("Google Chrome", "Visual Studio Code"), which the label-anchored tiers
+  // below cannot see past. Only collected for a real query: every word starts
+  // with an empty one, and an unfiltered list already ranks fine without this.
+  var appWords = (entry.kind === "app" && needle) ? label.split(/\s+/) : []
   var score = 80
 
   if (label === needle) score = entry.parent === "root" ? 2 : 0
   // An installed app whose name contains the query as a whole word ("zen"
   // for Zen Browser) beats exact-labeled menu entries like Install > Zen.
-  else if (entry.kind === "app" && label.split(/\s+/).indexOf(needle) >= 0) score = 0
+  else if (appWords.indexOf(needle) >= 0) score = 0
   else if (label.indexOf(needle) === 0) score = 10
+  // A prefix of one of those words ("chr" for Google Chrome) is a weaker match
+  // than a label that starts at the query, but still has to clear the menu
+  // entries labelled with the bare name. 13 nets to 8 once the app discount
+  // below lands: past an action row, which takes no discount at all, and level
+  // with a menu row whose whole label starts at the query (10 - 2), which then
+  // keeps the order tiebreak below.
+  else if (appWords.some(function(word) { return word.indexOf(needle) === 0 })) score = 13
   else if (label.indexOf(needle) >= 0) score = 30
   else if (nameText.indexOf(needle) >= 0) score = 40
   else if (descriptionTextMatches(needle, descriptionText)) score = 60
